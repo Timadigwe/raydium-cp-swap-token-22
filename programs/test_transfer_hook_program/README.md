@@ -24,12 +24,11 @@ This transfer hook program demonstrates a minimal, safe implementation that:
 
 ## Program IDs
 
-### Test Transfer Hook Program
-**Localnet**: `HEngeJQLoaujgA44QRLCMVtDWKcx8mvhQErfRgKXGQKs`
-**Devnet**: `HEngeJQLoaujgA44QRLCMVtDWKcx8mvhQErfRgKXGQKs`
-
-### Raydium CP Swap AMM
+## Raydium CP Swap AMM
 **Localnet**: `HJP61gQgQTzTkT7eXfz3WCzfiF2KmPhVWE2e4Yjc4VLT`
+**Devnet**: `HJP61gQgQTzTkT7eXfz3WCzfiF2KmPhVWE2e4Yjc4VLT`
+
+
 
 ## Features
 
@@ -208,23 +207,78 @@ yarn test tests/initializev2.test.ts
 
 ## Integration Example
 
-```typescript
-// Example of how this transfer hook is used in tests
-const transferHookProgramId = new PublicKey("HEngeJQLoaujgA44QRLCMVtDWKcx8mvhQErfRgKXGQKs");
+### 1. Creating a Transfer Hook Token for AMM Use
 
-// Initialize extra account metadata
-await program.methods
+```typescript
+// 1. Create a token with transfer hook extension
+const transferHookProgramId = new PublicKey("HEngeJQLoaujgA44QRLCMVtDWKcx8mvhQErfRgKXGQKs");
+const hookMint = await createMintWithTransferHook(
+  connection,
+  payer,
+  authority,
+  mintKeypair,
+  transferHookProgramId
+);
+
+// 2. Initialize extra account metadata for the token
+await transferHookProgram.methods
   .initializeExtraAccountMetaList()
   .accounts({
     payer: payer.publicKey,
     extraAccountMetaList: extraAccountMetaListPda,
-    mint: mint.publicKey,
+    mint: hookMint.publicKey,
     counterAccount: counterPda,
     tokenProgram: TOKEN_2022_PROGRAM_ID,
     associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
     systemProgram: SystemProgram.programId,
   })
   .signers([payer])
+  .rpc();
+
+// 3. Create TokenBadge to whitelist the token for AMM use
+const tokenBadgeAddress = await createTokenBadge(
+  ammProgram,
+  connection,
+  tokenBadgeAuthority,
+  funder,
+  ammConfigAddress,
+  hookMint.publicKey
+);
+
+// 4. Create AMM pool using V2 instruction (supports transfer hooks)
+await ammProgram.methods
+  .initializeV2(initAmount0, initAmount1, openTime)
+  .accountsStrict({
+    creator: creator.publicKey,
+    ammConfig: ammConfigAddress,
+    poolState: poolAddress,
+    token0Mint: hookMint.publicKey,
+    token1Mint: otherTokenMint,
+    // ... other accounts
+    token0Badge: tokenBadgeAddress, // TokenBadge for hook token
+    token1Badge: PublicKey.default, // No badge needed for regular token
+  })
+  .remainingAccounts(transferHookAccounts) // Additional accounts for hooks
+  .signers([creator])
+  .rpc();
+```
+
+### 2. Trading with Transfer Hook Tokens
+
+```typescript
+// Swaps work transparently once the pool is created
+await ammProgram.methods
+  .swapBaseInput(amountIn, minimumAmountOut)
+  .accountsStrict({
+    payer: trader.publicKey,
+    ammConfig: ammConfigAddress,
+    poolState: poolAddress,
+    inputTokenAccount: traderHookTokenAccount,
+    outputTokenAccount: traderOtherTokenAccount,
+    // ... vault accounts
+  })
+  .remainingAccounts(transferHookAccounts) // Hook accounts handled automatically
+  .signers([trader])
   .rpc();
 ```
 
@@ -240,6 +294,25 @@ await program.methods
 
 This program is part of the Raydium CP Swap project and follows the same licensing terms.
 
+## Architecture Benefits
+
+This implementation demonstrates several key advantages:
+
+### 1. **Separation of Concerns**
+- **AMM Core Logic**: Focused on trading mathematics and pool management
+- **Transfer Hook Logic**: Isolated token-specific behavior
+- **TokenBadge System**: Controlled onboarding of new token types
+
+### 2. **Scalability**
+- **Modular Design**: New transfer hooks can be added without AMM changes
+- **Config-Based Control**: Multiple AMM configs can have different token policies
+- **Efficient Account Management**: Minimal additional accounts required
+
+### 3. **Developer Experience**
+- **Clear Integration Path**: Well-defined steps for adding transfer hook support
+- **Comprehensive Testing**: Full test suite covering all scenarios
+- **Reference Implementation**: This hook serves as a template for safe implementations
+
 ## Contributing
 
 This is a reference implementation for testing purposes. For production transfer hooks, ensure:
@@ -247,3 +320,5 @@ This is a reference implementation for testing purposes. For production transfer
 - Proper access controls
 - Comprehensive testing
 - Clear documentation of any transfer restrictions
+- Compliance with TokenBadge best practices
+- Integration testing with AMM operations

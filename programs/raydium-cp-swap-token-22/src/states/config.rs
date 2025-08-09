@@ -24,10 +24,30 @@ pub struct AmmConfig {
     pub protocol_owner: Pubkey,
     /// Address of the fund fee owner
     pub fund_owner: Pubkey,
+    /// Address of the token badge authority
+    pub token_badge_authority: Pubkey,
     /// padding
     pub padding: [u64; 16],
 }
 
 impl AmmConfig {
-    pub const LEN: usize = 8 + 1 + 1 + 2 + 4 * 8 + 32 * 2 + 8 * 16;
+    pub const LEN: usize = 8 + 1 + 1 + 2 + 4 * 8 + 32 * 2 + 32 + 8 * 16;
+}
+
+
+#[account]
+#[derive(Default)]
+pub struct TokenBadge {
+    pub amm_config: Pubkey, // 32
+    pub token_mint: Pubkey, // 32
+}
+
+impl TokenBadge {
+    pub const LEN: usize = 8 + 32 + 32 + 128;
+
+    pub fn initialize(&mut self, amm_config: Pubkey, token_mint: Pubkey) -> Result<()> {
+        self.amm_config = amm_config;
+        self.token_mint = token_mint;
+        Ok(())
+    }
 }

@@ -1,5 +1,5 @@
-use crate::error::ErrorCode;
-use anchor_lang::{prelude::*, system_program};
+use crate::{error::ErrorCode, states::TokenBadge};
+use anchor_lang::{prelude::*, solana_program::program::invoke, system_program};
 use anchor_spl::{
     token::{Token, TokenAccount},
     token_2022,
@@ -12,6 +12,7 @@ use spl_token_2022::{
         BaseStateWithExtensions, ExtensionType, StateWithExtensions,
     },
 };
+use spl_transfer_hook_interface::onchain::add_extra_accounts_for_execute_cpi;
 use std::collections::HashSet;
 
 const MINT_WHITELIST: [&'static str; 4] = [
@@ -30,46 +31,103 @@ pub fn transfer_from_user_to_pool_vault<'a>(
     amount: u64,
     mint_decimals: u8,
 ) -> Result<()> {
-    msg!("transfer_from_user_to_pool_vault - amount: {}, mint_decimals: {}", amount, mint_decimals);
-    msg!("transfer_from_user_to_pool_vault - mint owner: {}", mint.owner);
-    msg!("transfer_from_user_to_pool_vault - token_program: {}", token_program.key);
-    
     if amount == 0 {
-        msg!("transfer_from_user_to_pool_vault - amount is 0, skipping");
         return Ok(());
     }
-    
-    // Use the appropriate token program based on the mint owner
-    if *mint.owner == token_2022::Token2022::id() {
-        msg!("transfer_from_user_to_pool_vault - using token_2022 program");
-        token_2022::transfer_checked(
-            CpiContext::new(
-                token_program.to_account_info(),
-                token_2022::TransferChecked {
-                    from,
-                    to: to_vault,
-                    authority,
-                    mint,
-                },
-            ),
+    token_2022::transfer_checked(
+        CpiContext::new(
+            token_program.to_account_info(),
+            token_2022::TransferChecked {
+                from,
+                to: to_vault,
+                authority,
+                mint,
+            },
+        ),
+        amount,
+        mint_decimals,
+    )
+}
+
+pub fn transfer_from_user_to_pool_vault_v2<'a>(
+    authority: &AccountInfo<'a>,
+    source: &AccountInfo<'a>,
+    mint: &AccountInfo<'a>,
+    destination: &AccountInfo<'a>,
+    token_program: &AccountInfo<'a>,
+    signers: &[&AccountInfo<'a>],
+    amount: u64,
+    decimals: u8,
+    transfer_hook_program: &AccountInfo<'a>,
+    additional_accounts: &Vec<AccountInfo<'a>>,
+) -> Result<()> {
+    let signers: Vec<&Pubkey> = signers.iter().map(|info| info.key).collect();
+    let signers_slice = &signers;
+
+    if *mint.to_account_info().owner == token_2022::Token2022::id() {
+    let mut transfer_instruction = spl_token_2022::instruction::transfer_checked(
+        token_program.key,
+        source.key,
+        mint.key,
+        destination.key,
+        authority.key,
+        &signers_slice,
+        amount,
+        decimals,
+    )?;
+    // Step 2: Create base account infos
+    let mut account_infos = vec![
+        source.clone(),
+        mint.clone(),
+        destination.clone(),
+        authority.clone(),
+    ];
+
+    // Step 3: Only add Transfer Hook accounts if we have additional accounts
+    if !additional_accounts.is_empty() {
+        // Step 4: Use the helper to add transfer hook accounts to the instruction
+        add_extra_accounts_for_execute_cpi(
+            &mut transfer_instruction,
+            &mut account_infos,
+            transfer_hook_program.key,
+            source.clone(),
+            mint.clone(),
+            destination.clone(),
+            authority.clone(),
             amount,
-            mint_decimals,
+            &additional_accounts,
         )
-    } else {
-        msg!("transfer_from_user_to_pool_vault - using regular SPL token program");
-        // Use regular SPL token program
-        anchor_spl::token::transfer(
-            CpiContext::new(
-                token_program.to_account_info(),
-                anchor_spl::token::Transfer {
-                    from,
-                    to: to_vault,
-                    authority,
-                },
-            ),
-            amount,
-        )
+        .map_err(|e| ProgramError::from(e))?;
     }
+
+    msg!("Account number, {}", transfer_instruction.accounts.len());
+    // Step 5: Execute the modified instruction
+    invoke(&transfer_instruction, &account_infos)?;
+    Ok(())
+    
+} else {
+    msg!("transfer_from_user_to_pool_vault - using regular SPL token program");
+    msg!("transfer_from_user_to_pool_vault - amount: {}, mint_decimals: {}", amount, decimals);
+    msg!("transfer_from_user_to_pool_vault - mint_owner: {}", mint.to_account_info().owner);
+    msg!("transfer_from_user_to_pool_vault - token_program_owner: {}", token_program.to_account_info().owner);
+    msg!("transfer_from_user_to_pool_vault - source_owner: {}", source.to_account_info().owner);
+    msg!("transfer_from_user_to_pool_vault - destination_owner: {}", destination.to_account_info().owner);
+    msg!("transfer_from_user_to_pool_vault - authority_owner: {}", authority.to_account_info().owner);
+    msg!("transfer_from_user_to_pool_vault - additional_accounts: {:?}", additional_accounts);
+
+    // Use regular SPL token program
+    anchor_spl::token::transfer(
+        CpiContext::new(
+            token_program.to_account_info(),
+            anchor_spl::token::Transfer {
+                from: source.to_account_info(),
+                to: destination.to_account_info(),
+                authority: authority.to_account_info(),
+            },
+        ),
+        amount,
+    )
+}
 }
 
 pub fn transfer_from_pool_vault_to_user<'a>(
@@ -199,6 +257,9 @@ pub fn get_transfer_fee(mint_info: &AccountInfo, pre_fee_amount: u64) -> Result<
     Ok(fee)
 }
 
+
+
+
 pub fn is_supported_mint(mint_account: &InterfaceAccount<Mint>) -> Result<bool> {
     let mint_info = mint_account.to_account_info();
     if *mint_info.owner == Token::id() {
@@ -217,6 +278,8 @@ pub fn is_supported_mint(mint_account: &InterfaceAccount<Mint>) -> Result<bool> 
             && e != ExtensionType::TokenMetadata
             && e != ExtensionType::InterestBearingConfig
             && e != ExtensionType::ScaledUiAmount
+            && e != ExtensionType::TransferHook
+            && e != ExtensionType::PermanentDelegate
         {
             return Ok(false);
         }

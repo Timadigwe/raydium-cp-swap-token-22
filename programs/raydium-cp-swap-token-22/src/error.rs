@@ -32,4 +32,15 @@ pub enum ErrorCode {
     InitLpAmountTooLess,
     #[msg("TransferFee calculate not match")]
     TransferFeeCalculateNotMatch,
+    #[msg("Invalid remaining accounts")]
+    RemainingAccountsInvalidSlice, 
+    #[msg("Insufficient remaining accounts")]
+    RemainingAccountsInsufficient, 
+    #[msg("Same accounts type is provided more than once")]
+    RemainingAccountsDuplicatedAccountsType, 
+    #[msg("Unable to call transfer hook without extra accounts")]
+    NoExtraAccountsForTransferHook, 
+    #[msg("Too many supplemental tick arrays provided")]
+    TooManySupplementalTickArrays, 
+
 }

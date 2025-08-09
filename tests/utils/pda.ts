@@ -125,3 +125,15 @@ export async function getOrcleAccountAddress(
   );
   return [address, bump];
 }
+
+export async function getTokenBadgeAddress(
+  ammConfigAddress: PublicKey,
+  tokenMint: PublicKey,
+  programId: PublicKey
+): Promise<[PublicKey, number]> {
+  const [address, bump] = await PublicKey.findProgramAddress(
+    [Buffer.from("token_badge"), ammConfigAddress.toBuffer(), tokenMint.toBuffer()],
+    programId
+  );
+  return [address, bump];
+}

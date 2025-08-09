@@ -27,6 +27,8 @@ anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
 anchor-spl = { version = "0.31.0", features = ["memo", "metadata"] }
 spl-token-2022 = { version = "7.0.0", features = ["no-entrypoint"] }
 spl-math = { version = "0.3", features = ["no-entrypoint"] }
+spl-tlv-account-resolution = "0.9.0"
+spl-transfer-hook-interface = "0.9.0"
 uint = "0.10.0"
 solana-security-txt = "1.1.1"
 bytemuck = { version = "1.4.0", features = ["derive", "min_const_generics"] }

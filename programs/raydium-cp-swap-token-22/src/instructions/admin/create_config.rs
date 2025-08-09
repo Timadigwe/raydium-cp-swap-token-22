@@ -46,6 +46,7 @@ pub fn create_amm_config(
     amm_config.protocol_fee_rate = protocol_fee_rate;
     amm_config.fund_fee_rate = fund_fee_rate;
     amm_config.create_pool_fee = create_pool_fee;
+    amm_config.token_badge_authority = ctx.accounts.owner.key();
     amm_config.fund_owner = ctx.accounts.owner.key();
     Ok(())
 }

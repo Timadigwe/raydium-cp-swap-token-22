@@ -22,8 +22,15 @@ import {
   createInitializeTransferFeeConfigInstruction,
   createInitializeMintInstruction,
   getAccount,
+  createAssociatedTokenAccountInstruction,
+  initializeTransferHook,
 } from "@solana/spl-token";
 import { sendTransaction } from "./index";
+
+
+export const TEST_TRANSFER_HOOK_PROGRAM_ID = new PublicKey(
+  "HEngeJQLoaujgA44QRLCMVtDWKcx8mvhQErfRgKXGQKs"
+);
 
 // create a token mint and a token2022 mint with transferFeeConfig
 export async function createTokenMintAndAssociatedTokenAccount(
@@ -157,6 +164,134 @@ export async function createTokenMintAndAssociatedTokenAccount(
   ];
 }
 
+// create a token mint and a token2022 mint with transferFeeConfig V2
+export async function createTokenMintAndAssociatedTokenAccountV2(
+  connection: Connection,
+  payer: Signer,
+  mintAuthority: Signer,
+  // transferFeeConfig: { transferFeeBasisPoints: number; MaxFee: number }
+  transferHookProgramId: PublicKey
+) {
+  let ixs: TransactionInstruction[] = [];
+  ixs.push(
+    anchor.web3.SystemProgram.transfer({
+      fromPubkey: payer.publicKey,
+      toPubkey: mintAuthority.publicKey,
+      lamports: web3.LAMPORTS_PER_SOL,
+    })
+  );
+  await sendTransaction(connection, ixs, [payer]);
+
+  interface Token {
+    address: PublicKey;
+    program: PublicKey;
+  }
+
+  let tokenArray: Token[] = [];
+  let token0 = await createMint(
+    connection,
+    mintAuthority,
+    mintAuthority.publicKey,
+    null,
+    9,
+    undefined,
+    {
+      commitment: "confirmed",
+    }
+  );
+  tokenArray.push({ address: token0, program: TOKEN_PROGRAM_ID });
+
+  let token1 = await createMintWithTransferHook(
+    connection,
+    payer,
+    mintAuthority,
+    Keypair.generate(),
+    transferHookProgramId
+  );
+  console.log(`Token 1: ${token1}`);
+
+  tokenArray.push({ address: token1, program: TOKEN_2022_PROGRAM_ID });
+
+  tokenArray.sort(function (x, y) {
+    const buffer1 = x.address.toBuffer();
+    const buffer2 = y.address.toBuffer();
+
+    for (let i = 0; i < buffer1.length && i < buffer2.length; i++) {
+      if (buffer1[i] < buffer2[i]) {
+        return -1;
+      }
+      if (buffer1[i] > buffer2[i]) {
+        return 1;
+      }
+    }
+
+    if (buffer1.length < buffer2.length) {
+      return -1;
+    }
+    if (buffer1.length > buffer2.length) {
+      return 1;
+    }
+
+    return 0;
+  });
+
+  token0 = tokenArray[0].address;
+  token1 = tokenArray[1].address;
+  //   console.log("Token 0", token0.toString());
+  //   console.log("Token 1", token1.toString());
+  const token0Program = tokenArray[0].program;
+  const token1Program = tokenArray[1].program;
+
+  const ownerToken0Account = await getOrCreateAssociatedTokenAccount(
+    connection,
+    payer,
+    token0,
+    payer.publicKey,
+    false,
+    "processed",
+    { skipPreflight: true },
+    token0Program
+  );
+  await mintTo(
+    connection,
+    payer,
+    token0,
+    ownerToken0Account.address,
+    mintAuthority,
+    100_000_000_000_000,
+    [],
+    { skipPreflight: true },
+    token0Program
+  );
+
+  const ownerToken1Account = await getOrCreateAssociatedTokenAccount(
+    connection,
+    payer,
+    token1,
+    payer.publicKey,
+    false,
+    "processed",
+    { skipPreflight: false },
+    token1Program
+  );
+  await mintTo(
+    connection,
+    payer,
+    token1,
+    ownerToken1Account.address,
+    mintAuthority,
+    100_000_000_000_000,
+    [],
+    { skipPreflight: true },
+    token1Program
+  );
+
+  return [
+    { token0, token0Program },
+    { token1, token1Program },
+  ];
+}
+
 async function createMintWithTransferFee(
   connection: Connection,
   payer: Signer,
@@ -207,6 +342,138 @@ async function createMintWithTransferFee(
   );
 
   return mintKeypair.publicKey;
+}
+
+export async function createMintWithTransferHook(
+  connection: Connection,
+  payer: Signer,
+  mintAuthority: Signer,
+  mintKeypair = Keypair.generate(),
+  transferHookProgramId: PublicKey
+) {
+  const extensions = [ExtensionType.TransferHook];
+
+  const mintLen = getMintLen(extensions);
+
+  const mintLamports = await connection.getMinimumBalanceForRentExemption(mintLen);
+
+  // 1. Create Account
+  const createAccTx = new Transaction().add(
+    SystemProgram.createAccount({
+      fromPubkey: payer.publicKey,
+      newAccountPubkey: mintKeypair.publicKey,
+      space: mintLen,
+      lamports: mintLamports,
+      programId: TOKEN_2022_PROGRAM_ID,
+    })
+  );
+
+  await sendAndConfirmTransaction(
+    connection,
+    createAccTx,
+    [payer, mintKeypair],
+    undefined
+  );
+
+  // 2. Initialize Hook
+  await initializeTransferHook(
+    connection,
+    payer,
+    mintKeypair.publicKey,
+    mintAuthority.publicKey,
+    transferHookProgramId,
+    {
+      skipPreflight: true,
+      commitment: "confirmed",
+      preflightCommitment: "confirmed",
+    },
+    TOKEN_2022_PROGRAM_ID
+  );
+
+  // 3. Initialize Mint
+  const initMintTx = new Transaction().add(
+    createInitializeMintInstruction(
+      mintKeypair.publicKey,
+      9,
+      mintAuthority.publicKey,
+      null,
+      TOKEN_2022_PROGRAM_ID
+    )
+  );
+
+  await sendAndConfirmTransaction(
+    connection,
+    initMintTx,
+    [payer, mintKeypair],
+    undefined
+  );
+
+  return mintKeypair.publicKey;
+}
+
+export async function createATAWithTransferHook(
+  connection,
+  payer,
+  mint,
+  owner,
+  tokenProgram = TOKEN_2022_PROGRAM_ID
+) {
+  try {
+    // Get the associated token address
+    const associatedTokenAddress = getAssociatedTokenAddressSync(
+      mint,
+      owner,
+      false,
+      tokenProgram
+    );
+
+    // Check if account already exists
+    try {
+      const account = await getAccount(
+        connection,
+        associatedTokenAddress,
+        "confirmed",
+        tokenProgram
+      );
+      console.log(`ATA already exists: ${associatedTokenAddress}`);
+      return { address: associatedTokenAddress };
+    } catch (error) {
+      // Account doesn't exist, we need to create it
+    }
+
+    // Create the instruction for ATA creation
+    const instruction = createAssociatedTokenAccountInstruction(
+      payer.publicKey, // payer
+      associatedTokenAddress, // ata
+      owner, // owner
+      mint, // mint
+      tokenProgram // token program
+    );
+
+    // Create and send transaction
+    const transaction = new Transaction().add(instruction);
+
+    // Set recent blockhash
+    const { blockhash } = await connection.getLatestBlockhash("confirmed");
+    transaction.recentBlockhash = blockhash;
+    transaction.feePayer = payer.publicKey;
+
+    // Send transaction with proper commitment
+    const signature = await sendAndConfirmTransaction(connection, transaction, [payer], {
+      commitment: "confirmed",
+      skipPreflight: false,
+      preflightCommitment: "confirmed",
+      maxRetries: 3,
+    });
+
+    console.log(`ATA created with signature: ${signature}`);
+    console.log(`ATA address: ${associatedTokenAddress}`);
+
+    return { address: associatedTokenAddress };
+  } catch (error) {
+    console.error("Error creating ATA with transfer hook:", error);
+    throw error;
+  }
 }
 
 export async function getUserAndPoolVaultAmount(

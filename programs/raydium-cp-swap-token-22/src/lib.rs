@@ -60,6 +60,22 @@ pub mod raydium_cp_swap_token_22 {
         )
     }
 
+
+  // A TokenBadge is a PDA which allows pools to be initialized for such tokens. Each amm config can independently whitelist tokens using a TokenBadge account
+  // It allows unrestricted creation of pools for tokens that have certain extensions in our case Transfer hooks 
+  // In order to use TransferHook, the owner of AmmConfig must issue a TokenBadge for that token.
+    pub fn initialize_token_badge(ctx: Context<InitializeTokenBadge>) -> Result<()> {
+        instructions::initialize_token_badge::handler(ctx)
+    }
+
+    // Initialize the extra account meta list for the token
+    pub fn initialize_extra_account_meta_list(
+        ctx: Context<InitializeExtraAccountMetaList>,
+    ) -> Result<()> {
+        instructions::v2::initialize_extra_account_meta(ctx)
+    }
+
+
     /// Updates the owner of the amm config
     /// Must be called by the current owner or admin
     ///
@@ -132,7 +148,7 @@ pub mod raydium_cp_swap_token_22 {
     /// * `init_amount_0` - the initial amount_0 to deposit
     /// * `init_amount_1` - the initial amount_1 to deposit
     /// * `open_time` - the timestamp allowed for swap
-    ///
+    // ///
     pub fn initialize(
         ctx: Context<Initialize>,
         init_amount_0: u64,
@@ -140,6 +156,15 @@ pub mod raydium_cp_swap_token_22 {
         open_time: u64,
     ) -> Result<()> {
         instructions::initialize(ctx, init_amount_0, init_amount_1, open_time)
+    }
+
+    pub fn initialize_v2(
+        ctx: Context<InitializeV2>,
+        init_amount_0: u64,
+        init_amount_1: u64,
+        open_time: u64,
+    ) -> Result<()> {
+        instructions::v2::initialize_v2(ctx, init_amount_0, init_amount_1, open_time)
     }
 
 

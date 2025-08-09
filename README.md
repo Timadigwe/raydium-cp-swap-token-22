@@ -1,264 +1,138 @@
-# Test Transfer Hook Program
+# Raydium CP Swap with Token-2022 Transfer Hook Support
 
-A reference implementation of a Token-2022 Transfer Hook program for testing and demonstration purposes within the **Raydium CP Swap AMM ecosystem**. This program serves as an example of how to implement a safe and compliant transfer hook that works seamlessly with Raydium's AMM implementation that fully supports transfer hook-enabled tokens.
+A **Raydium AMM implementation** extending the constant product swap model to fully support **Token-2022 tokens with Transfer Hooks**. This project demonstrates how to build a production-ready AMM that can safely integrate with transfer hook-enabled tokens through a robust whitelisting mechanism.
 
 ## Overview
 
-This project consists of two main components:
+This is an enhanced version of the Raydium Constant Product AMM that adds comprehensive support for:
 
-### 1. **Raydium CP Swap AMM with Transfer Hook Support**
-The main AMM program (`raydium_cp_swap_token_22`) provides a complete constant product swap implementation with native support for:
-- **Token-2022 Transfer Hooks**: Full integration with transfer hook-enabled tokens
-- **TokenBadge System**: Whitelisting mechanism for transfer hook tokens
-- **V2 Pool Creation**: Enhanced pool initialization for hook-enabled tokens
-- **Seamless Operations**: Swap, deposit, withdraw operations work transparently with transfer hooks
-- **Additional Account Management**: Handles extra accounts required by transfer hooks
+- **Token-2022 Transfer Hooks**: Full compatibility with tokens that have transfer hook extensions
+- **TokenBadge Whitelisting System**: Controlled onboarding of transfer hook programs through validation
+- **Enhanced Pool Operations**: All AMM functions (swap, deposit, withdraw) work seamlessly with hook tokens
+- **Safety Guarantees**: Ensures transfer hook programs comply with strict operational rules
 
-### 2. **Test Transfer Hook Program** (This Program)
-This transfer hook program demonstrates a minimal, safe implementation that:
-- Logs token transfers
-- Maintains a transfer counter
-- Validates transfer hook execution context
-- Does not interfere with AMM pool operations
-- Follows TokenBadge best practices for eligibility
+## Key Features
 
-## Program IDs
+### 🔄 **Full Token-2022 Support**
+- Native integration with Token-2022 program
+- Automatic handling of additional accounts required by transfer hooks
+- Optimized transaction construction for hook-enabled tokens
 
-## Raydium CP Swap AMM
-**Localnet**: `HJP61gQgQTzTkT7eXfz3WCzfiF2KmPhVWE2e4Yjc4VLT`
-**Devnet**: `HJP61gQgQTzTkT7eXfz3WCzfiF2KmPhVWE2e4Yjc4VLT`
+### 🏷️ **TokenBadge Whitelisting System**
+The core innovation is the **TokenBadge** system that enables controlled support for transfer hook tokens:
 
+- **Authority-Based Control**: Only designated `token_badge_authority` can whitelist tokens
+- **Per-Config Flexibility**: Each AMM config can have different token policies
+- **Compliance Enforcement**: Only tokens meeting safety criteria receive badges
+- **Pool Creation Gates**: Transfer hook tokens require valid TokenBadge to create pools
 
+### 📋 **Transfer Hook Compliance Rules**
 
-## Features
+Transfer hook programs must adhere to strict guidelines to be eligible for TokenBadge:
 
-### ✅ TokenBadge Best Practices Compliance
+- **📖 Publicly Available Code**: Source code must be open and verifiable
+- **🔍 Verifiable Build**: Code and on-chain program must match
+- **🔒 Safe Operations**: Only perform risk-free operations (e.g., logging)
+- **🚫 Non-Blocking**: Must not block transfers or interfere with pool operations
+- **⚡ Minimal Accounts**: Cannot request excessive additional accounts
+- **💰 No Fees**: Cannot impose additional transfer fees
+- **🔄 No Token Transfers**: Cannot initiate token transfers (including SOL/WSOL)
 
-This program adheres to the recommended best practices for TokenBadge eligibility:
+## Program Architecture
 
-- **📖 Publicly Available Code**: Source code is open and transparent
-- **🔒 Safe Operations**: Only performs logging operations with no risk to users
-- **🚫 Non-Blocking**: Does not block token transfers or interfere with pool operations
-- **⚡ Minimal Account Usage**: Uses minimal extra accounts to avoid transaction bloat
-- **💰 No Additional Fees**: Does not impose any fees on transfers
-- **🔄 No Token Transfers**: Does not attempt any token transfers itself
+### Core AMM Program
+**Program ID**: `HJP61gQgQTzTkT7eXfz3WCzfiF2KmPhVWE2e4Yjc4VLT`
 
-### Core Functionality
+Main instructions include:
+- `initialize_v2`: Enhanced pool creation with transfer hook support
+- `initialize_token_badge`: Whitelist transfer hook tokens
+- `swap_base_input/output`: Trading with automatic hook handling
+- `deposit/withdraw`: Liquidity operations with hook compatibility
 
-1. **Transfer Logging**: Logs each transfer with amount and counter information
-2. **Transfer Counting**: Maintains a global counter of transfers for the token
-3. **Validation**: Ensures the hook is only called during valid transfer contexts
-4. **Example Warning**: Demonstrates logging for transfers over 50 tokens (without blocking)
-
-## Instructions
-
-### `initialize_extra_account_meta_list`
-
-Initializes the extra account metadata list required for the transfer hook.
-
-**Accounts:**
-- `payer`: Signer paying for account creation
-- `extra_account_meta_list`: PDA storing extra account metadata
-- `mint`: The token mint this hook applies to
-- `counter_account`: PDA storing the transfer counter
-- `token_program`: Token2022 program
-- `associated_token_program`: Associated Token program
-- `system_program`: System program
-
-### `transfer_hook`
-
-Executed on every token transfer, performing logging and validation.
-
-**Parameters:**
-- `amount`: The amount of tokens being transferred
-
-**Accounts:**
-- `source_token`: Source token account
-- `mint`: Token mint
-- `destination_token`: Destination token account
-- `owner`: Token account owner
-- `extra_account_meta_list`: Extra account metadata PDA
-- `counter_account`: Transfer counter PDA
-
-## Implementation Details
-
-### Account Structure
+### TokenBadge System
 
 ```rust
 #[account]
-pub struct CounterAccount {
-    counter: u64,
+pub struct TokenBadge {
+    pub amm_config: Pubkey,  // Associated AMM config
+    pub token_mint: Pubkey,  // Whitelisted token mint
 }
 ```
 
-### Error Handling
+TokenBadges are PDAs with seeds: `[b"token_badge", amm_config, token_mint]`
 
-The program defines custom errors for validation:
-- `AmountTooBig`: Used for demonstration (currently unused)
-- `IsNotCurrentlyTransferring`: Ensures hook execution context is valid
+## Instructions
 
-### Extra Account Metadata
+### Core AMM Operations
 
-The program requires one extra account:
-- Counter account PDA (seeds: `[b"counter"]`)
+#### `initialize_v2`
+Enhanced pool creation supporting transfer hook tokens.
 
-## Raydium AMM Transfer Hook Integration
+**Key Features:**
+- Validates TokenBadge for transfer hook tokens
+- Handles additional accounts for hook execution
+- Maintains compatibility with regular SPL tokens
 
-### TokenBadge System
-The Raydium AMM implements a **TokenBadge** system that enables controlled support for transfer hook tokens:
+#### `initialize_token_badge`
+Creates a TokenBadge to whitelist a transfer hook token.
 
-- **Whitelisting**: Each AMM config can independently whitelist transfer hook tokens by issuing TokenBadge accounts
-- **Authority Control**: Only the `token_badge_authority` of an AMM config can create TokenBadges
-- **Pool Creation**: Tokens with transfer hooks require a valid TokenBadge to create pools
-- **Seamless Trading**: Once whitelisted, tokens work transparently in all AMM operations
+**Access Control:**
+- Only callable by `token_badge_authority` of the AMM config
+- Requires thorough vetting of the transfer hook program
 
-### V2 Pool Support
-The AMM provides enhanced V2 instructions specifically designed for transfer hook compatibility:
+#### `swap_base_input` / `swap_base_output`
+Trading operations that work transparently with both regular and hook tokens.
 
-```rust
-// V2 pool initialization with transfer hook support
-pub fn initialize_v2(
-    ctx: Context<InitializeV2>,
-    init_amount_0: u64,
-    init_amount_1: u64,
-    open_time: u64,
-) -> Result<()>
+**Transfer Hook Integration:**
+- Automatically includes required additional accounts
+- Uses `add_extra_accounts_for_execute_cpi` for proper hook execution
+- Maintains transaction efficiency despite additional complexity
 
-// Token badge creation for transfer hook tokens
-pub fn initialize_token_badge(ctx: Context<InitializeTokenBadge>) -> Result<()>
+## Usage Example
 
-// Extra account metadata initialization for transfer hooks
-pub fn initialize_extra_account_meta_list(
-    ctx: Context<InitializeExtraAccountMetaList>,
-) -> Result<()>
-```
-
-### Transfer Hook Integration
-The AMM handles transfer hook complexities automatically:
-
-- **Additional Accounts**: Manages extra accounts required by transfer hooks
-- **CPI Integration**: Uses `add_extra_accounts_for_execute_cpi` for proper hook execution
-- **Account Type Management**: Supports various transfer hook account types (input, output, intermediate)
-- **Transaction Optimization**: Efficiently handles increased transaction size from hook accounts
-
-## Usage in Tests
-
-This program is used in the Raydium CP Swap test suite to verify:
-- Transfer hook compatibility with AMM operations
-- TokenBadge system functionality
-- V2 pool creation with hook-enabled tokens
-- Swap, deposit, and withdraw operations with transfer hooks
-- Transaction size and performance impact
-- End-to-end integration testing
-
-## Safety Features
-
-### Transfer Context Validation
-
-```rust
-fn check_is_transferring(ctx: &Context<TransferHook>) -> Result<()> {
-    // Validates that the hook is called from within a valid transfer
-    let source_token_info = ctx.accounts.source_token.to_account_info();
-    let mut account_data_ref = source_token_info.try_borrow_mut_data()?;
-    let mut account = PodStateWithExtensionsMut::<PodAccount>::unpack(*account_data_ref)?;
-    let account_extension = account.get_extension_mut::<TransferHookAccount>()?;
-
-    if !bool::from(account_extension.transferring) {
-        return err!(TransferError::IsNotCurrentlyTransferring);
-    }
-
-    Ok(())
-}
-```
-
-### Safe Counter Increment
-
-```rust
-// Increment the transfer count safely
-let count = ctx.accounts.counter_account.counter
-    .checked_add(1)
-    .ok_or(TransferError::AmountTooBig)?;
-```
-
-## Building and Testing
-
-### Prerequisites
-
-- Rust 1.70+
-- Solana CLI tools
-- Anchor Framework 0.31.1+
-
-### Build
-
-```bash
-# From project root
-anchor build
-```
-
-### Test
-
-```bash
-# Run the full test suite including transfer hook tests
-anchor test
-
-# Or run specific transfer hook tests
-yarn test tests/initializev2.test.ts
-```
-
-## Integration Example
-
-### 1. Creating a Transfer Hook Token for AMM Use
+### 1. Deploy and Whitelist a Transfer Hook Token
 
 ```typescript
-// 1. Create a token with transfer hook extension
-const transferHookProgramId = new PublicKey("HEngeJQLoaujgA44QRLCMVtDWKcx8mvhQErfRgKXGQKs");
-const hookMint = await createMintWithTransferHook(
+// 1. Create AMM config with designated token badge authority
+const ammConfig = await createAmmConfig(
+  program,
   connection,
-  payer,
-  authority,
-  mintKeypair,
-  transferHookProgramId
+  owner,
+  configIndex,
+  tradeFeeRate,
+  protocolFeeRate,
+  fundFeeRate,
+  createFee
 );
 
-// 2. Initialize extra account metadata for the token
-await transferHookProgram.methods
-  .initializeExtraAccountMetaList()
+// 2. Token badge authority whitelists compliant transfer hook token
+const tokenBadge = await program.methods
+  .initializeTokenBadge()
   .accounts({
-    payer: payer.publicKey,
-    extraAccountMetaList: extraAccountMetaListPda,
-    mint: hookMint.publicKey,
-    counterAccount: counterPda,
-    tokenProgram: TOKEN_2022_PROGRAM_ID,
-    associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+    ammConfig: ammConfigAddress,
+    tokenBadgeAuthority: tokenBadgeAuthority.publicKey,
+    tokenMint: transferHookTokenMint,
+    tokenBadge: tokenBadgeAddress,
+    funder: funder.publicKey,
     systemProgram: SystemProgram.programId,
   })
-  .signers([payer])
+  .signers([tokenBadgeAuthority, funder])
   .rpc();
 
-// 3. Create TokenBadge to whitelist the token for AMM use
-const tokenBadgeAddress = await createTokenBadge(
-  ammProgram,
-  connection,
-  tokenBadgeAuthority,
-  funder,
-  ammConfigAddress,
-  hookMint.publicKey
-);
-
-// 4. Create AMM pool using V2 instruction (supports transfer hooks)
-await ammProgram.methods
+// 3. Create pool with transfer hook token
+await program.methods
   .initializeV2(initAmount0, initAmount1, openTime)
-  .accountsStrict({
+  .accounts({
     creator: creator.publicKey,
     ammConfig: ammConfigAddress,
     poolState: poolAddress,
-    token0Mint: hookMint.publicKey,
-    token1Mint: otherTokenMint,
+    token0Mint: transferHookTokenMint,
+    token1Mint: regularTokenMint,
+    token0Badge: tokenBadgeAddress, // Required for transfer hook token
+    token1Badge: PublicKey.default, // Not needed for regular token
     // ... other accounts
-    token0Badge: tokenBadgeAddress, // TokenBadge for hook token
-    token1Badge: PublicKey.default, // No badge needed for regular token
   })
-  .remainingAccounts(transferHookAccounts) // Additional accounts for hooks
+  .remainingAccounts(transferHookAccounts)
   .signers([creator])
   .rpc();
 ```
@@ -266,59 +140,116 @@ await ammProgram.methods
 ### 2. Trading with Transfer Hook Tokens
 
 ```typescript
-// Swaps work transparently once the pool is created
-await ammProgram.methods
+// Swaps work transparently once pool is created
+await program.methods
   .swapBaseInput(amountIn, minimumAmountOut)
-  .accountsStrict({
+  .accounts({
     payer: trader.publicKey,
     ammConfig: ammConfigAddress,
     poolState: poolAddress,
-    inputTokenAccount: traderHookTokenAccount,
-    outputTokenAccount: traderOtherTokenAccount,
-    // ... vault accounts
+    inputTokenAccount: traderInputAccount,
+    outputTokenAccount: traderOutputAccount,
+    // ... vault and mint accounts
   })
-  .remainingAccounts(transferHookAccounts) // Hook accounts handled automatically
+  .remainingAccounts(transferHookAccounts) // Automatically handled
   .signers([trader])
   .rpc();
 ```
 
+## Safety Mechanisms
+
+### 1. **Controlled Onboarding**
+- Only pre-approved transfer hook programs can create pools
+- Token badge authority acts as gatekeeper
+- Multiple AMM configs allow different risk tolerances
+
+### 2. **Runtime Validation**
+- Transfer hook tokens must have valid TokenBadge
+- Additional account requirements are validated
+- Transaction size limits prevent DoS attacks
+
+### 3. **Compliance Enforcement**
+Transfer hook programs undergo evaluation for:
+- Code transparency and auditability
+- Non-interference with AMM operations
+- Reasonable additional account requirements
+- Absence of fee extraction mechanisms
+
+## Test Transfer Hook Program
+
+**Program ID**: `HEngeJQLoaujgA44QRLCMVtDWKcx8mvhQErfRgKXGQKs`
+
+This project includes a simple transfer hook program for testing purposes that:
+- Logs token transfers with amount information
+- Maintains a global transfer counter
+- Demonstrates compliant transfer hook behavior
+- Serves as a reference implementation for developers
+
+The test hook exemplifies all compliance rules:
+- ✅ Open source and transparent
+- ✅ Only performs logging (no blocking)
+- ✅ Minimal additional accounts (just a counter)
+- ✅ No fee extraction
+- ✅ No token transfers initiated
+
+## Building and Testing
+
+### Prerequisites
+- Rust 1.70+
+- Solana CLI tools
+- Anchor Framework 0.31.1+
+
+### Build
+```bash
+anchor build
+```
+
+### Test
+```bash
+# Run full test suite including transfer hook integration
+anchor test
+
+# Run specific transfer hook tests
+yarn test tests/initializev2.test.ts
+```
+
+## Project Structure
+
+```
+programs/
+├── raydium-cp-swap-token-22/     # Main AMM program with transfer hook support
+│   ├── src/
+│   │   ├── instructions/
+│   │   │   ├── v2/               # Transfer hook enhanced instructions
+│   │   │   └── ...
+│   │   ├── states/
+│   │   │   ├── config.rs         # AmmConfig and TokenBadge definitions
+│   │   │   └── ...
+│   │   └── utils/
+│   │       ├── remaining_accounts_utils.rs  # Transfer hook account management
+│   │       └── token.rs          # Enhanced token operations
+│   └── ...
+└── test_transfer_hook_program/   # Reference transfer hook implementation
+    └── src/lib.rs
+```
+
 ## Security Considerations
 
-- The program only reads from token accounts and maintains its own state
-- No token transfers are initiated by the hook
-- No fees are collected or imposed
-- Validation ensures proper execution context
-- Overflow protection on counter increments
-
-## License
-
-This program is part of the Raydium CP Swap project and follows the same licensing terms.
-
-## Architecture Benefits
-
-This implementation demonstrates several key advantages:
-
-### 1. **Separation of Concerns**
-- **AMM Core Logic**: Focused on trading mathematics and pool management
-- **Transfer Hook Logic**: Isolated token-specific behavior
-- **TokenBadge System**: Controlled onboarding of new token types
-
-### 2. **Scalability**
-- **Modular Design**: New transfer hooks can be added without AMM changes
-- **Config-Based Control**: Multiple AMM configs can have different token policies
-- **Efficient Account Management**: Minimal additional accounts required
-
-### 3. **Developer Experience**
-- **Clear Integration Path**: Well-defined steps for adding transfer hook support
-- **Comprehensive Testing**: Full test suite covering all scenarios
-- **Reference Implementation**: This hook serves as a template for safe implementations
+- **Authority Management**: Token badge authorities should be carefully managed
+- **Hook Vetting**: Thorough review required before issuing TokenBadges
+- **Account Limits**: Transfer hooks with excessive account requirements should be rejected
+- **Fee Monitoring**: Ensure hooks don't impose hidden fees
+- **Upgrade Controls**: Consider transfer hook upgrade authorities
 
 ## Contributing
 
-This is a reference implementation for testing purposes. For production transfer hooks, ensure:
-- Thorough security audits
-- Proper access controls
-- Comprehensive testing
-- Clear documentation of any transfer restrictions
-- Compliance with TokenBadge best practices
-- Integration testing with AMM operations
+When proposing new transfer hook integrations:
+
+1. **Submit Hook for Review**: Provide complete source code and documentation
+2. **Demonstrate Compliance**: Show adherence to all safety rules
+3. **Testing**: Include comprehensive test coverage
+4. **Documentation**: Clear explanation of hook behavior and restrictions
+
+## License
+
+This project follows the same licensing terms as the Raydium protocol.
